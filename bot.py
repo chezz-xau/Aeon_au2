@@ -180,4 +180,133 @@ async def record_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def delete_syif(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  if not await check_admin(
+  if not await check_admin(update):
+    return
+  if not context.args:
+    await update.message.reply_text(
+        "⚠️ Sila masukkan ID.\nFormat: `/delsyif [ID]`", parse_mode="Markdown"
+    )
+    return
+  record_id = context.args[0]
+  conn = sqlite3.connect("staff_record.db")
+  cursor = conn.cursor()
+  cursor.execute("DELETE FROM syif_petang WHERE id = ?", (record_id,))
+  conn.commit()
+  conn.close()
+  await update.message.reply_text(
+      f"🗑️ Rekod Syif Petang dengan ID `{record_id}` telah dipadam.",
+      parse_mode="Markdown",
+  )
+
+
+async def delete_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  if not await check_admin(update):
+    return
+  if not context.args:
+    await update.message.reply_text(
+        "⚠️ Sila masukkan ID.\nFormat: `/delot [ID]`", parse_mode="Markdown"
+    )
+    return
+  record_id = context.args[0]
+  conn = sqlite3.connect("staff_record.db")
+  cursor = conn.cursor()
+  cursor.execute("DELETE FROM overtime WHERE id = ?", (record_id,))
+  conn.commit()
+  conn.close()
+  await update.message.reply_text(
+      f"🗑️ Rekod OT dengan ID `{record_id}` telah dipadam.",
+      parse_mode="Markdown",
+  )
+
+
+async def delete_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  if not await check_admin(update):
+    return
+  if not context.args:
+    await update.message.reply_text(
+        "⚠️ Sila masukkan ID.\nFormat: `/delcuti [ID]`", parse_mode="Markdown"
+    )
+    return
+  record_id = context.args[0]
+  conn = sqlite3.connect("staff_record.db")
+  cursor = conn.cursor()
+  cursor.execute("DELETE FROM hari_cuti WHERE id = ?", (record_id,))
+  conn.commit()
+  conn.close()
+  await update.message.reply_text(
+      f"🗑️ Rekod Hari Cuti dengan ID `{record_id}` telah dipadam.",
+      parse_mode="Markdown",
+  )
+
+
+async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  if not await check_admin(update):
+    return
+  conn = sqlite3.connect("staff_record.db")
+  cursor = conn.cursor()
+  cursor.execute("SELECT id, date FROM syif_petang ORDER BY date ASC")
+  syif_rows = cursor.fetchall()
+  total_syif = len(syif_rows)
+  cursor.execute(
+      "SELECT id, date, start_time, end_time, hours FROM overtime ORDER BY"
+      " date ASC"
+  )
+  ot_rows = cursor.fetchall()
+  total_ot_hours = sum(row[4] for row in ot_rows)
+  cursor.execute("SELECT id, date FROM hari_cuti ORDER BY date ASC")
+  cuti_rows = cursor.fetchall()
+  total_cuti = len(cuti_rows)
+  conn.close()
+
+  report = "📊 **LAPORAN REKOD STAF** 📊\n"
+  report += "----------------------------------\n\n"
+  report += f"🌙 **Syif Petang:** `{total_syif} Hari`\n"
+  if syif_rows:
+    for row in syif_rows:
+      report += f"   • [ID: {row[0]}] `{row[1]}`\n"
+  else:
+    report += "   • Tiada rekod.\n"
+  report += "\n"
+  report += f"⏱️ **Overtime (OT):** `{total_ot_hours:.1f} Jam Keseluruhan`\n"
+  if ot_rows:
+    for row in ot_rows:
+      report += f"   • [ID: {row[0]}] `{row[1]}` ({row[2]} - {row[3]}) ➔ **{row[4]:.1f} jam**\n"
+  else:
+    report += "   • Tiada rekod OT.\n"
+  report += "\n"
+  report += f"🏖️ **Kerja Hari Cuti:** `{total_cuti} Hari`\n"
+  if cuti_rows:
+    for row in cuti_rows:
+      report += f"   • [ID: {row[0]}] `{row[1]}`\n"
+  else:
+    report += "   • Tiada rekod.\n"
+  await update.message.reply_text(report, parse_mode="Markdown")
+
+
+def main():
+  if not TOKEN:
+    print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
+    return
+
+  flask_thread = threading.Thread(target=run_flask)
+  flask_thread.daemon = True
+  flask_thread.start()
+
+  init_db()
+
+  application = Application.builder().token(TOKEN).build()
+  application.add_handler(CommandHandler("start", start))
+  application.add_handler(CommandHandler("syif", record_syif))
+  application.add_handler(CommandHandler("ot", record_ot))
+  application.add_handler(CommandHandler("cuti", record_cuti))
+  application.add_handler(CommandHandler("delsyif", delete_syif))
+  application.add_handler(CommandHandler("delot", delete_ot))
+  application.add_handler(CommandHandler("delcuti", delete_cuti))
+  application.add_handler(CommandHandler("laporan", generate_report))
+
+  print("Bot Telegram sedang berjalan pada thread utama...")
+  application.run_polling()
+
+
+if __name__ == "__main__":
+  main()
