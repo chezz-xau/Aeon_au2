@@ -11,7 +11,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# 1. SETUP FLASK UNTUK PATUHI SYARAT WEB SERVICE RENDER
+# 1. SETUP FLASK SEBAGAI UTAMA SUPAYA PORT TERUS TERBUKA UNTUK RENDER
 app_flask = Flask(__name__)
 
 
@@ -25,19 +25,16 @@ def run_flask():
   app_flask.run(host="0.0.0.0", port=port)
 
 
-# 2. AMBIL KUNCI RAHSIA DARI RENDER ENVIRONMENT VARIABLES
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 admin_env = os.environ.get("ADMIN_ID")
 ADMIN_ID = int(admin_env) if admin_env and admin_env.isdigit() else 0
 
-# Konfigurasi Logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
 
 
-# 3. FUNGSI SEMAKAN ADMIN
 async def check_admin(update: Update) -> bool:
   user_id = update.effective_user.id
   if user_id != ADMIN_ID:
@@ -48,7 +45,6 @@ async def check_admin(update: Update) -> bool:
   return True
 
 
-# 4. SETUP DATABASE SQLITE
 def init_db():
   conn = sqlite3.connect("staff_record.db")
   cursor = conn.cursor()
@@ -68,18 +64,15 @@ def init_db():
   conn.close()
 
 
-# 5. REKOD SYIF PETANG (/syif YYYY-MM-DD)
 async def record_syif(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not await check_admin(update):
     return
-
   if not context.args:
     await update.message.reply_text(
         "⚠️ Sila masukkan tarikh.\nFormat: `/syif 2026-11-12`",
         parse_mode="Markdown",
     )
     return
-
   date_str = context.args[0]
   try:
     datetime.strptime(date_str, "%Y-%m-%d")
@@ -89,40 +82,33 @@ async def record_syif(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
     return
-
   conn = sqlite3.connect("staff_record.db")
   cursor = conn.cursor()
   cursor.execute("INSERT INTO syif_petang (date) VALUES (?)", (date_str,))
   conn.commit()
   conn.close()
-
   await update.message.reply_text(
       f"✅ Berjaya rekod **Syif Petang** untuk tarikh: `{date_str}`",
       parse_mode="Markdown",
   )
 
 
-# 6. REKOD OT (/ot YYYY-MM-DD HH:MM HH:MM)
 async def record_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not await check_admin(update):
     return
-
   if len(context.args) < 3:
     await update.message.reply_text(
         "⚠️ Maklumat tidak lengkap.\nFormat: `/ot 2026-11-12 17:00 21:00`",
         parse_mode="Markdown",
     )
     return
-
   date_str = context.args[0]
   start_str = context.args[1]
   end_str = context.args[2]
-
   try:
     datetime.strptime(date_str, "%Y-%m-%d")
     t1 = datetime.strptime(start_str, "%H:%M")
     t2 = datetime.strptime(end_str, "%H:%M")
-
     diff = t2 - t1
     hours = diff.total_seconds() / 3600
     if hours < 0:
@@ -133,7 +119,6 @@ async def record_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
     return
-
   conn = sqlite3.connect("staff_record.db")
   cursor = conn.cursor()
   cursor.execute(
@@ -143,7 +128,6 @@ async def record_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
   )
   conn.commit()
   conn.close()
-
   await update.message.reply_text(
       f"✅ Berjaya rekod **OT**:\n📅 Tarikh: `{date_str}`\n⏰ Masa: `{start_str}"
       f" - {end_str}`\n⏱️ Tempoh: `{hours:.1f} Jam`",
@@ -151,18 +135,15 @@ async def record_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
   )
 
 
-# 7. REKOD HARI CUTI (/cuti YYYY-MM-DD)
 async def record_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not await check_admin(update):
     return
-
   if not context.args:
     await update.message.reply_text(
         "⚠️ Sila masukkan tarikh.\nFormat: `/cuti 2026-11-15`",
         parse_mode="Markdown",
     )
     return
-
   date_str = context.args[0]
   try:
     datetime.strptime(date_str, "%Y-%m-%d")
@@ -172,20 +153,17 @@ async def record_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
     return
-
   conn = sqlite3.connect("staff_record.db")
   cursor = conn.cursor()
   cursor.execute("INSERT INTO hari_cuti (date) VALUES (?)", (date_str,))
   conn.commit()
   conn.close()
-
   await update.message.reply_text(
       f"✅ Berjaya rekod **Kerja Hari Cuti** untuk tarikh: `{date_str}`",
       parse_mode="Markdown",
   )
 
 
-# 8. FUNGSI DELETE REKOD
 async def delete_syif(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not await check_admin(update):
     return
@@ -246,34 +224,27 @@ async def delete_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
   )
 
 
-# 9. FUNGSI LAPORAN DENGAN PAPARAN ID (/laporan)
 async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if not await check_admin(update):
     return
-
   conn = sqlite3.connect("staff_record.db")
   cursor = conn.cursor()
-
   cursor.execute("SELECT id, date FROM syif_petang ORDER BY date ASC")
   syif_rows = cursor.fetchall()
   total_syif = len(syif_rows)
-
   cursor.execute(
       "SELECT id, date, start_time, end_time, hours FROM overtime ORDER BY"
       " date ASC"
   )
   ot_rows = cursor.fetchall()
   total_ot_hours = sum(row[4] for row in ot_rows)
-
   cursor.execute("SELECT id, date FROM hari_cuti ORDER BY date ASC")
   cuti_rows = cursor.fetchall()
   total_cuti = len(cuti_rows)
-
   conn.close()
 
   report = "📊 **LAPORAN REKOD STAF** 📊\n"
   report += "----------------------------------\n\n"
-
   report += f"🌙 **Syif Petang:** `{total_syif} Hari`\n"
   if syif_rows:
     for row in syif_rows:
@@ -281,7 +252,6 @@ async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
   else:
     report += "   • Tiada rekod.\n"
   report += "\n"
-
   report += f"⏱️ **Overtime (OT):** `{total_ot_hours:.1f} Jam Keseluruhan`\n"
   if ot_rows:
     for row in ot_rows:
@@ -289,33 +259,18 @@ async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
   else:
     report += "   • Tiada rekod OT.\n"
   report += "\n"
-
   report += f"🏖️ **Kerja Hari Cuti:** `{total_cuti} Hari`\n"
   if cuti_rows:
     for row in cuti_rows:
       report += f"   • [ID: {row[0]}] `{row[1]}`\n"
   else:
     report += "   • Tiada rekod.\n"
-
   await update.message.reply_text(report, parse_mode="Markdown")
 
 
-# 10. MAIN FUNCTION
-def main():
-  if not TOKEN:
-    print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
-    return
-
-  # Jalankan Flask dalam latar belakang
-  flask_thread = threading.Thread(target=run_flask)
-  flask_thread.daemon = True
-  flask_thread.start()
-
+def run_telegram_bot():
   init_db()
-
-  # Guna binaan Application.builder() yang stabil untuk v20.x
   application = Application.builder().token(TOKEN).build()
-
   application.add_handler(CommandHandler("syif", record_syif))
   application.add_handler(CommandHandler("ot", record_ot))
   application.add_handler(CommandHandler("cuti", record_cuti))
@@ -323,9 +278,21 @@ def main():
   application.add_handler(CommandHandler("delot", delete_ot))
   application.add_handler(CommandHandler("delcuti", delete_cuti))
   application.add_handler(CommandHandler("laporan", generate_report))
-
-  print("Bot dan pelayan web Flask sedang berjalan...")
   application.run_polling()
+
+
+def main():
+  if not TOKEN:
+    print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
+    return
+
+  # Jalankan bot Telegram di dalam background thread
+  bot_thread = threading.Thread(target=run_telegram_bot)
+  bot_thread.daemon = True
+  bot_thread.start()
+
+  # Jalankan Flask pada thread utama supaya port web terbuka dengan serta-merta
+  run_flask()
 
 
 if __name__ == "__main__":
