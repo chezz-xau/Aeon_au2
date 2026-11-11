@@ -11,7 +11,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# 1. SETUP FLASK SEBAGAI UTAMA SUPAYA PORT TERUS TERBUKA UNTUK RENDER
+# 1. SETUP FLASK UNTUK RENDER WEB SERVICE
 app_flask = Flask(__name__)
 
 
@@ -37,6 +37,7 @@ logging.basicConfig(
 
 async def check_admin(update: Update) -> bool:
   user_id = update.effective_user.id
+  print(f"DEBUG: Mesej diterima daripada User ID: {user_id}")
   if user_id != ADMIN_ID:
     await update.message.reply_text(
         "⛔ Maaf, anda tidak mempunyai kebenaran untuk menggunakan bot ini."
@@ -62,6 +63,21 @@ def init_db():
   )
   conn.commit()
   conn.close()
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  if not await check_admin(update):
+    return
+  await update.message.reply_text(
+      "👋 Selamat datang ke **Aeonbot - Sistem Rekod Staf**!\n\n"
+      "Sila guna arahan berikut:\n"
+      "👉 `/syif YYYY-MM-DD` - Rekod Syif Petang\n"
+      "👉 `/ot YYYY-MM-DD HH:MM HH:MM` - Rekod OT\n"
+      "👉 `/cuti YYYY-MM-DD` - Rekod Hari Cuti\n"
+      "📊 `/laporan` - Lihat Laporan & ID\n"
+      "🗑️ `/delsyif [ID]`, `/delot [ID]`, `/delcuti [ID]` - Padam rekod",
+      parse_mode="Markdown",
+  )
 
 
 async def record_syif(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -268,9 +284,21 @@ async def generate_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(report, parse_mode="Markdown")
 
 
-def run_telegram_bot():
+def main():
+  if not TOKEN:
+    print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
+    return
+
+  # Jalankan Flask dalam latar belakang (background thread)
+  flask_thread = threading.Thread(target=run_flask)
+  flask_thread.daemon = True
+  flask_thread.start()
+
   init_db()
+
+  # Jalankan Bot Telegram pada thread utama
   application = Application.builder().token(TOKEN).build()
+  application.add_handler(CommandHandler("start", start))
   application.add_handler(CommandHandler("syif", record_syif))
   application.add_handler(CommandHandler("ot", record_ot))
   application.add_handler(CommandHandler("cuti", record_cuti))
@@ -278,21 +306,9 @@ def run_telegram_bot():
   application.add_handler(CommandHandler("delot", delete_ot))
   application.add_handler(CommandHandler("delcuti", delete_cuti))
   application.add_handler(CommandHandler("laporan", generate_report))
+
+  print("Bot Telegram sedang berjalan dengan run_polling()...")
   application.run_polling()
-
-
-def main():
-  if not TOKEN:
-    print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
-    return
-
-  # Jalankan bot Telegram di dalam background thread
-  bot_thread = threading.Thread(target=run_telegram_bot)
-  bot_thread.daemon = True
-  bot_thread.start()
-
-  # Jalankan Flask pada thread utama supaya port web terbuka dengan serta-merta
-  run_flask()
 
 
 if __name__ == "__main__":
