@@ -6,7 +6,7 @@ import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     ContextTypes,
 )
@@ -21,7 +21,6 @@ def home():
 
 
 def run_flask():
-  # Render akan beri port secara automatik, default ke 10000 jika tiada
   port = int(os.environ.get("PORT", 10000))
   app_flask.run(host="0.0.0.0", port=port)
 
@@ -307,26 +306,27 @@ def main():
     print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
     return
 
-  # Jalankan Flask dalam latar belakang (background thread) supaya Render detect port
+  # Jalankan Flask dalam latar belakang
   flask_thread = threading.Thread(target=run_flask)
   flask_thread.daemon = True
   flask_thread.start()
 
   init_db()
-  app = ApplicationBuilder().token(TOKEN).build()
 
-  app.add_handler(CommandHandler("syif", record_syif))
-  app.add_handler(CommandHandler("ot", record_ot))
-  app.add_handler(CommandHandler("cuti", record_cuti))
-  app.add_handler(CommandHandler("delsyif", delete_syif))
-  app.add_handler(CommandHandler("delot", delete_ot))
-  app.add_handler(CommandHandler("delcuti", delete_cuti))
-  app.add_handler(CommandHandler("laporan", generate_report))
+  # Guna binaan Application.builder() yang stabil untuk v20.x
+  application = Application.builder().token(TOKEN).build()
+
+  application.add_handler(CommandHandler("syif", record_syif))
+  application.add_handler(CommandHandler("ot", record_ot))
+  application.add_handler(CommandHandler("cuti", record_cuti))
+  application.add_handler(CommandHandler("delsyif", delete_syif))
+  application.add_handler(CommandHandler("delot", delete_ot))
+  application.add_handler(CommandHandler("delcuti", delete_cuti))
+  application.add_handler(CommandHandler("laporan", generate_report))
 
   print("Bot dan pelayan web Flask sedang berjalan...")
-  app.run_polling()
+  application.run_polling()
 
 
 if __name__ == "__main__":
   main()
-
