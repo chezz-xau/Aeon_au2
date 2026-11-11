@@ -1,5 +1,6 @@
-python-telegram-bot==20.8
+python-telegram-bot==21.1
 flask==3.0.3
+
 
 
 
