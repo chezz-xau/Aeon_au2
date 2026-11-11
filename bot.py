@@ -288,12 +288,14 @@ def main():
     print("Ralat: TELEGRAM_BOT_TOKEN tidak dijumpai!")
     return
 
+  # Jalankan Flask dalam background thread
   flask_thread = threading.Thread(target=run_flask)
   flask_thread.daemon = True
   flask_thread.start()
 
   init_db()
 
+  # Binaan Application dan jalankan polling dengan betul untuk versi 20.x/21.x
   application = Application.builder().token(TOKEN).build()
   application.add_handler(CommandHandler("start", start))
   application.add_handler(CommandHandler("syif", record_syif))
@@ -304,8 +306,8 @@ def main():
   application.add_handler(CommandHandler("delcuti", delete_cuti))
   application.add_handler(CommandHandler("laporan", generate_report))
 
-  print("Bot Telegram sedang berjalan pada thread utama...")
-  application.run_polling()
+  print("Bot Telegram sedang berjalan...")
+  application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
