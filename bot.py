@@ -1,6 +1,5 @@
 from datetime import datetime
 import os
--import psycopg2
 import flask
 from flask import Flask, request
 import pg8000.dbapi
@@ -24,7 +23,6 @@ def home():
 
 # SAMBUNGAN KE NEON POSTGRESQL MENGGUNAKAN PG8000
 def get_db_connection():
-  # Parse DATABASE_URL untuk pg8000
   if DATABASE_URL.startswith("postgresql://"):
     url = DATABASE_URL.replace("postgresql://", "")
   else:
