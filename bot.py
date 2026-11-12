@@ -1,8 +1,9 @@
 from datetime import datetime
 import os
+-import psycopg2
 import flask
 from flask import Flask, request
-import psycopg2
+import pg8000.dbapi
 import requests
 
 # 1. SETUP FLASK UNTUK RENDER WEB SERVICE
@@ -21,9 +22,34 @@ def home():
   return "Bot Telegram & Neon DB Sedang Berjalan!"
 
 
-# SAMBUNGAN KE NEON POSTGRESQL
+# SAMBUNGAN KE NEON POSTGRESQL MENGGUNAKAN PG8000
 def get_db_connection():
-  conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+  # Parse DATABASE_URL untuk pg8000
+  if DATABASE_URL.startswith("postgresql://"):
+    url = DATABASE_URL.replace("postgresql://", "")
+  else:
+    url = DATABASE_URL
+
+  user_pass, host_db = url.split("@")
+  user, password = user_pass.split(":")
+  host_port, db_ssl = host_db.split("/")
+  if ":" in host_port:
+    host, port = host_port.split(":")
+    port = int(port)
+  else:
+    host = host_port
+    port = 5432
+
+  database = db_ssl.split("?")[0]
+
+  conn = pg8000.dbapi.connect(
+      user=user,
+      password=password,
+      host=host,
+      port=port,
+      database=database,
+      ssl_context=True,
+  )
   return conn
 
 
