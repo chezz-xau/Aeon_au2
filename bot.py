@@ -1,8 +1,9 @@
 from datetime import datetime
 import os
-import sqlite3
-import requests
+import flask
 from flask import Flask, request
+import psycopg2
+import requests
 
 # 1. SETUP FLASK UNTUK RENDER WEB SERVICE
 app_flask = Flask(__name__)
@@ -11,31 +12,39 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 admin_env = os.environ.get("ADMIN_ID")
 ADMIN_ID = int(admin_env) if admin_env and admin_env.isdigit() else 0
 
+DATABASE_URL = os.environ.get("DATABASE_URL")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 
 @app_flask.route("/")
 def home():
-  return "Bot Telegram Sedang Berjalan!"
+  return "Bot Telegram & Neon DB Sedang Berjalan!"
 
 
-# SETUP DATABASE SQLITE
+# SAMBUNGAN KE NEON POSTGRESQL
+def get_db_connection():
+  conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+  return conn
+
+
+# BINA TABLE DALAM POSTGRESQL
 def init_db():
-  conn = sqlite3.connect("staff_record.db")
+  conn = get_db_connection()
   cursor = conn.cursor()
   cursor.execute(
       """CREATE TABLE IF NOT EXISTS syif_petang 
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT)"""
+                    (id SERIAL PRIMARY KEY, date TEXT)"""
   )
   cursor.execute(
       """CREATE TABLE IF NOT EXISTS overtime 
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, start_time TEXT, end_time TEXT, hours REAL)"""
+                    (id SERIAL PRIMARY KEY, date TEXT, start_time TEXT, end_time TEXT, hours REAL)"""
   )
   cursor.execute(
       """CREATE TABLE IF NOT EXISTS hari_cuti 
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT)"""
+                    (id SERIAL PRIMARY KEY, date TEXT)"""
   )
   conn.commit()
+  cursor.close()
   conn.close()
 
 
@@ -45,7 +54,7 @@ def send_message(chat_id, text):
   requests.post(url, json=payload)
 
 
-# 2. WEBHOOK ENDPOINT UNTUK TERIMA MESEJ DARI TELEGRAM
+# 2. WEBHOOK ENDPOINT
 @app_flask.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
   update = request.get_json()
@@ -66,7 +75,7 @@ def webhook():
     command = parts[0]
     args = parts[1:]
 
-    conn = sqlite3.connect("staff_record.db")
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     if command == "/start":
@@ -91,7 +100,7 @@ def webhook():
         try:
           datetime.strptime(date_str, "%Y-%m-%d")
           cursor.execute(
-              "INSERT INTO syif_petang (date) VALUES (?)", (date_str,)
+              "INSERT INTO syif_petang (date) VALUES (%s)", (date_str,)
           )
           conn.commit()
           send_message(
@@ -121,7 +130,7 @@ def webhook():
             hours += 24
           cursor.execute(
               "INSERT INTO overtime (date, start_time, end_time, hours) VALUES"
-              " (?, ?, ?, ?)",
+              " (%s, %s, %s, %s)",
               (date_str, start_str, end_str, hours),
           )
           conn.commit()
@@ -146,7 +155,9 @@ def webhook():
         date_str = args[0]
         try:
           datetime.strptime(date_str, "%Y-%m-%d")
-          cursor.execute("INSERT INTO hari_cuti (date) VALUES (?)", (date_str,))
+          cursor.execute(
+              "INSERT INTO hari_cuti (date) VALUES (%s)", (date_str,)
+          )
           conn.commit()
           send_message(
               chat_id,
@@ -157,22 +168,23 @@ def webhook():
               chat_id, "❌ Format tarikh salah. Gunakan format `YYYY-MM-DD`."
           )
 
-    elif command.startswith("/del"):
+    elif command in ["/delsyif", "/delot", "/delcuti"]:
       if not args:
-        send_message(chat_id, f"⚠️ Sila masukkan ID untuk dipadam. Contoh: `{command} 1`")
+        send_message(
+            chat_id, f"⚠️ Sila masukkan ID untuk dipadam. Contoh: `{command} 1`"
+        )
       else:
         record_id = args[0]
         if command == "/delsyif":
-          cursor.execute("DELETE FROM syif_petang WHERE id = ?", (record_id,))
+          cursor.execute("DELETE FROM syif_petang WHERE id = %s", (record_id,))
           msg_del = f"🗑️ Rekod Syif Petang dengan ID `{record_id}` telah dipadam."
         elif command == "/delot":
-          cursor.execute("DELETE FROM overtime WHERE id = ?", (record_id,))
+          cursor.execute("DELETE FROM overtime WHERE id = %s", (record_id,))
           msg_del = f"🗑️ Rekod OT dengan ID `{record_id}` telah dipadam."
         elif command == "/delcuti":
-          cursor.execute("DELETE FROM hari_cuti WHERE id = ?", (record_id,))
+          cursor.execute("DELETE FROM hari_cuti WHERE id = %s", (record_id,))
           msg_del = f"🗑️ Rekod Hari Cuti dengan ID `{record_id}` telah dipadam."
-        else:
-          msg_del = "❌ Arahan padam tidak dikenali."
+
         conn.commit()
         send_message(chat_id, msg_del)
 
@@ -203,18 +215,18 @@ def webhook():
         report += (
             f"   • [ID: {r[0]}] `{r[1]}` ({r[2]} - {r[3]}) ➔ **{r[4]:.1f} jam**\n"
         )
-      report += f"\n🏖️ **Hari Cuti:** `{total_cuti} Hari`\n"
+      report += f"\n🏖️ **Kerja Hari Cuti:** `{total_cuti} Hari`\n"
       for r in cuti_rows:
         report += f"   • [ID: {r[0]}] `{r[1]}`\n"
 
       send_message(chat_id, report)
 
+    cursor.close()
     conn.close()
   return "OK", 200
 
 
 def set_webhook():
-  # Dapatkan URL Render semasa secara automatik atau gunakan mekanisme webhook
   render_url = os.environ.get("RENDER_EXTERNAL_URL")
   if render_url:
     webhook_url = f"{render_url}/{TOKEN}"
