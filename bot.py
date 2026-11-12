@@ -215,7 +215,7 @@ def webhook():
         report += (
             f"   • [ID: {r[0]}] `{r[1]}` ({r[2]} - {r[3]}) ➔ **{r[4]:.1f} jam**\n"
         )
-      report += f"\n🏖️ **Kerja Hari Cuti:** `{total_cuti} Hari`\n"
+      report += f"\n🏖️ **Hari Cuti:** `{total_cuti} Hari`\n"
       for r in cuti_rows:
         report += f"   • [ID: {r[0]}] `{r[1]}`\n"
 
